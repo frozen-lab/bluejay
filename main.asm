@@ -4,6 +4,7 @@ global _start
 
 section .bss
   cwd_buf resb 4096
+  dent_buf resb 8192
 
 section .text
 _start:
@@ -27,6 +28,20 @@ _start:
   js error_exit
 
   mov r12, rax
+
+  ;; getdents64 syscall
+  mov rax, 217
+  mov rdi, r12
+  lea rsi, [dent_buf]
+  mov rdx, 8192
+  syscall
+
+  ;; print the dent buf
+  mov rdx, rax                  ; len of the buffer
+  mov rax, 0x01
+  mov rdi, 0x01
+  lea rsi, [dent_buf]
+  syscall
 
   jmp exit
 
