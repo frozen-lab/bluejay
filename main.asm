@@ -2,15 +2,12 @@ bits 64
 default rel
 global _start
 
-section .rodata
-  file db "shell.nix", 0x00
-
 section .bss
   cwd_buf resb 4096
-  buf resb 0x01
 
 section .text
 _start:
+  ;; read the current working dir
   mov rax, 79
   lea rdi, [cwd_buf]
   mov rsi, 4096
@@ -19,11 +16,17 @@ _start:
   test rax, rax
   js error_exit
 
-  mov rax, 0x01
-  mov rdi, 0x01
-  lea rsi, [cwd_buf]
-  mov rdx, 4096
+  ;; open cwd
+  mov rax, 0x02
+  lea rdi, [cwd_buf]
+  mov rsi, 0x8000               ; O_DIRECTORY
+  xor rdx, rdx
   syscall
+
+  test rax, rax
+  js error_exit
+
+  mov r12, rax
 
   jmp exit
 
