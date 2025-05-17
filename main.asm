@@ -21,7 +21,7 @@ _start:
   ;; open cwd
   mov rax, 0x02
   lea rdi, [cwd_buf]
-  mov rsi, 0x8000               ; O_DIRECTORY
+  mov rsi, 0x10000              ; O_DIRECTORY
   xor rdx, rdx
   syscall
 
@@ -30,57 +30,65 @@ _start:
 
   mov r12, rax                  ; fd of opened cwd
 
-  ;; getdents64 syscall
+  ;; read dir entries in cwd w/ getdents64 syscall
   mov rax, 217
   mov rdi, r12
   lea rsi, [dent_buf]
   mov rdx, 8192
   syscall
 
+  test rax, rax
+  js error_exit
+
   mov r13, rax                  ; sizeof(dent_buf)
 
 parse_loop:
-  lea rcx, [dent_buf]           ; pointer to dent_buf
-  xor rbx, rbx                  ; offset into dent_buf
+  xor rbx, rbx                  ; current offset to dent_buf
 
-.init_loop:
+.entry_loop:
   cmp rbx, r13
-  jae .done                     ; close the loop
+  jge .done
 
-  ;; entry starts at (dent_buf + rbx)
-  mov r11, rbx
-  add r11, 19                   ; offset to first char in d_name
+  ; get current entry addr
+  lea rcx, [dent_buf + rbx]
 
-  xor rdx, rdx                  ; sizeof(file)
-  lea rsi, [file]               ; pointer to file buf
+  ; Extract d_reclen (2 bytes at offset 16)
+  movzx r14, word [rcx + 16]
 
-.loop:
-  mov r12, rcx
-  add r12, rdx
-  add r12, r11
+  test r14, r14
+  jz .done
 
-  mov al, [r12]
+  ; get filename (offset 19)
+  lea rsi, [rcx + 19]
+  lea rdi, [file]
+  xor rdx, rdx                  ; size counter
+.copy_loop:
+  mov al, [rsi + rdx]
 
-  cmp al, 0x00
-  je .loop_end
+  test al, al
+  jz .add_newline
 
-  mov [rsi + rdx], al
+  mov [rdi + rdx], al
   inc rdx
 
-  jmp .loop
+  jmp .copy_loop
 
-.loop_end:
-  mov byte [rsi + rdx], 0x00
+.add_newline:
+  mov byte [rdi + rdx], 0x0A
   inc rdx
 
-.print_file:
+.print:
+  ; NOTE: rdx already contains sizeof(file)
   mov rax, 0x01
   mov rdi, 0x01
+  lea rsi, [file]
   syscall
 
 .next:
-  add rdx, r10
-  jmp .init_loop
+  ; Advance to next entry using preserved d_reclen
+  add rbx, r14
+
+  jmp .entry_loop
 
 .done:
   jmp exit
